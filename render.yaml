@@ -10,7 +10,5 @@ services:
     envVars:
       - key: PLAYWRIGHT_BROWSERS_PATH
         value: /opt/render/project/src/.cache/ms-playwright
-      - key: PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD
-        value: 1
       - key: PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH
         value: /opt/render/project/src/.cache/ms-playwright/chromium-1161/chrome-linux/chrome
