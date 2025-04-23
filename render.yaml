@@ -13,4 +13,4 @@ services:
       - key: PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD
         value: 1
       - key: PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH
-        value: /opt/render/project/src/.cache/ms-playwright/chromium-1124/chrome-linux/chrome
+        value: /opt/render/project/src/.cache/ms-playwright/chromium-1161/chrome-linux/chrome
