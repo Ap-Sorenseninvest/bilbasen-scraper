@@ -1,9 +1,9 @@
-services:
+sservices:
   - type: worker
     name: bilbasen-scraper
     env: python
     plan: free
     buildCommand: |
       pip install -r requirements.txt
-      playwright install chromium --with-deps
+      npx playwright install --with-deps
     startCommand: python main.py
