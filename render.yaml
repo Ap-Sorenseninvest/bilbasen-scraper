@@ -5,6 +5,7 @@ services:
     plan: free
     buildCommand: |
       pip install -r requirements.txt
-      PLAYWRIGHT_BROWSERS_PATH=./.playwright-cache playwright install chromium
+      mkdir -p /opt/render/project/.playwright
+      PLAYWRIGHT_BROWSERS_PATH=/opt/render/project/.playwright playwright install chromium
     startCommand: |
-      PLAYWRIGHT_BROWSERS_PATH=./.playwright-cache python main.py
+      PLAYWRIGHT_BROWSERS_PATH=/opt/render/project/.playwright python main.py
