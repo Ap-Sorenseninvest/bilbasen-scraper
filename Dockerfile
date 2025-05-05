@@ -3,6 +3,7 @@ FROM mcr.microsoft.com/playwright/python:v1.52.0-jammy
 
 # Angiv arbejdsmappe i containeren
 WORKDIR /app
+EXPOSE 10000
 
 # Kopiér requirements og installer Python-dependencies
 COPY requirements.txt .
