@@ -1,16 +1,12 @@
-# Bruger Playwrights officielle image med Python og Chromium installeret
 FROM mcr.microsoft.com/playwright/python:v1.52.0-jammy
 
-# Angiv arbejdsmappe i containeren
 WORKDIR /app
-EXPOSE 10000
 
-# Kopiér requirements og installer Python-dependencies
 COPY requirements.txt .
-RUN pip install -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Kopiér resten af projektet
 COPY . .
 
-# Kør din scraper
+EXPOSE 10000
+
 CMD ["python", "main.py"]

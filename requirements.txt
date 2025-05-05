@@ -1,5 +1,5 @@
-requests
+playwright==1.52.0
 beautifulsoup4
-playwright
-lxml
+requests
 flask
+flask-cors

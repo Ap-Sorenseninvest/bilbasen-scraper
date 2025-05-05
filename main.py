@@ -153,14 +153,17 @@ def scrape_bilbasen():
             print(f"✅ Gemt: {brand_model} - {price}")
 
 from flask import Flask
+from threading import Thread
 
 app = Flask(__name__)
 
 @app.route("/")
-def trigger_scraper():
-    print("⏳ Starter scraping...")
+def index():
+    return "Bilbasen scraper kører! 🚗"
+
+def run_scraper():
     scrape_bilbasen()
-    return "✅ Scraper startet"
 
 if __name__ == "__main__":
+    Thread(target=run_scraper).start()
     app.run(host="0.0.0.0", port=10000)
