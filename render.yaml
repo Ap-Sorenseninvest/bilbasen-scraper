@@ -1,12 +1,9 @@
 services:
   - type: worker
     name: bilbasen-scraper
-    env: python
+    env: docker
     plan: free
-    buildCommand: |
-      pip install -r requirements.txt
-      playwright install --with-deps
-    startCommand: python main.py
+    dockerfilePath: ./Dockerfile
     envVars:
       - key: SUPABASE_URL
         value: https://mmhzdntjwkkpflglwchy.supabase.co
