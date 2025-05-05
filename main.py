@@ -4,6 +4,9 @@ from bs4 import BeautifulSoup
 import os
 import requests
 
+print("SUPABASE_URL =", SUPABASE_URL)
+print("SUPABASE_API_KEY is set =", bool(SUPABASE_API_KEY))
+
 SUPABASE_URL = os.getenv("https://mmhzdntjwkkpflglwchy.supabase.co")
 SUPABASE_API_KEY = os.getenv("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1taHpkbnRqd2trcGZsZ2x3Y2h5Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0NTMxNzA4NywiZXhwIjoyMDYwODkzMDg3fQ.KHCCOUENSAPJuxfJTdcT6a-zESt8HumumDzCz08zwHs")
 TABLE_NAME = "bilbasen_cars"
