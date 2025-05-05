@@ -2,6 +2,8 @@ from playwright.sync_api import sync_playwright
 from bs4 import BeautifulSoup
 import os
 import requests
+from flask import Flask
+from threading import Thread
 
 # 🔐 Supabase credentials fra env
 SUPABASE_URL = os.getenv("SUPABASE_URL")
@@ -62,8 +64,13 @@ def scrape_bilbasen():
             if car_id in existing_ids:
                 continue
 
-            # Gå til bilens egen side
-            page.goto(full_link)
+            # Gå til bilens egen side (med timeout og fejl-håndtering)
+            try:
+                page.goto(full_link, timeout=60000, wait_until="domcontentloaded")
+                page.wait_for_timeout(2000)
+            except:
+                print(f"❌ Timeout ved navigation til bilside: {full_link}")
+                continue
 
             # Accepter cookies igen hvis popup vises
             try:
@@ -72,47 +79,40 @@ def scrape_bilbasen():
             except:
                 print("ℹ️ Ingen cookie-popup (bilside)")
 
-            # Vent på bilens indhold
             try:
                 page.wait_for_selector("main.bas-MuiVipPageComponent-main", timeout=20000)
             except:
-                print(f"❌ Timeout på bilside: {full_link}")
+                print(f"❌ Timeout på indhold ved: {full_link}")
                 continue
 
             car_html = page.content()
             car_soup = BeautifulSoup(car_html, "html.parser")
 
-            # Pris
+            # Hent detaljer
             price_el = car_soup.select_one('span.bas-MuiCarPriceComponent-value[data-e2e="car-retail-price"]')
             price = price_el.get_text(strip=True) if price_el else ""
 
-            # Mærke + model
             title_el = car_soup.select_one("h1.bas-MuiCarHeaderComponent-title")
             brand_model = title_el.get_text(strip=True) if title_el else ""
             brand = brand_model.split(" ")[0] if brand_model else ""
             model = " ".join(brand_model.split(" ")[1:]) if brand_model else ""
 
-            # Billeder
             image_tags = car_soup.select("img.bas-MuiGalleryImageComponent-image")
             image_urls = [img["src"] for img in image_tags if img.has_attr("src")]
             images_combined = ", ".join(image_urls[:3])
 
-            # Beskrivelse
             desc_el = car_soup.select_one("div[aria-label='beskrivelse'] .bas-MuiAdDescriptionComponent-descriptionText")
             description = desc_el.get_text(" ", strip=True) if desc_el else ""
 
-            # Detaljer
             details_rows = car_soup.select("div[aria-label='Detaljer'] tr")
             details = {row.select_one("th").get_text(strip=True): row.select_one("td").get_text(strip=True) for row in details_rows if row.select_one("th") and row.select_one("td")}
             year = details.get("Modelår", "")
             km = details.get("Kilometertal", "")
             motor = details.get("Drivmiddel", "")
 
-            # Model-info
             model_info_rows = car_soup.select("div[aria-label='Generelle modeloplysninger*'] tr")
             model_info = {row.select_one("th").get_text(strip=True): row.select_one("td").get_text(strip=True) for row in model_info_rows if row.select_one("th") and row.select_one("td")}
 
-            # Udstyr og tilbehør
             equipment_rows = car_soup.select("div[aria-label='Udstyr og tilbehør'] tr")
             equipment_items = []
             for row in equipment_rows:
@@ -149,14 +149,10 @@ def scrape_bilbasen():
                 json=data,
                 headers=headers
             )
-
             print(f"✅ Gemt: {brand_model} - {price}")
 
-from flask import Flask
-from threading import Thread
-
+# Flask server til Render
 app = Flask(__name__)
-
 @app.route("/")
 def index():
     return "Bilbasen scraper kører! 🚗"
