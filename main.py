@@ -152,5 +152,15 @@ def scrape_bilbasen():
 
             print(f"✅ Gemt: {brand_model} - {price}")
 
-if __name__ == "__main__":
+from flask import Flask
+
+app = Flask(__name__)
+
+@app.route("/")
+def trigger_scraper():
+    print("⏳ Starter scraping...")
     scrape_bilbasen()
+    return "✅ Scraper startet"
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=10000)
