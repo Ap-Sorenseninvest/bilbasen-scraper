@@ -27,10 +27,11 @@ def get_existing_ids():
 def scrape_bilbasen():
     existing_ids = get_existing_ids()
     with sync_playwright() as p:
-        browser = p.chromium.launch()
+        # ✅ Vigtigt: Tilføj headless=True HER
+        browser = p.chromium.launch(headless=True)
         page = browser.new_page()
         page.goto("https://www.bilbasen.dk/brugt/bil?includeengroscvr=true&includeleasing=false&sortby=date&sortorder=desc")
-
+        
         page.wait_for_selector("section.srp_results__2UEV_", timeout=10000)
         html = page.content()
         soup = BeautifulSoup(html, "html.parser")
