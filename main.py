@@ -1,17 +1,13 @@
-# main.py
 from playwright.sync_api import sync_playwright
 from bs4 import BeautifulSoup
 import os
 import requests
-from playwright.sync_api import sync_playwright
-from bs4 import BeautifulSoup
 
-# 🔐 Hent Supabase-credentials fra environment
+# 🔐 Supabase credentials fra env
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_API_KEY = os.getenv("SUPABASE_API_KEY")
 TABLE_NAME = "bilbasen_cars"
 
-# 🧪 Debug: Udskriv om de er korrekt sat
 print("SUPABASE_URL =", SUPABASE_URL)
 print("SUPABASE_API_KEY is set =", bool(SUPABASE_API_KEY))
 
@@ -34,12 +30,21 @@ def get_existing_ids():
 def scrape_bilbasen():
     existing_ids = get_existing_ids()
     with sync_playwright() as p:
-        # ✅ Vigtigt: Tilføj headless=True HER
         browser = p.chromium.launch(headless=True)
         page = browser.new_page()
+
+        # Gå til bilbasens oversigt
         page.goto("https://www.bilbasen.dk/brugt/bil?includeengroscvr=true&includeleasing=false&sortby=date&sortorder=desc")
 
-        page.wait_for_selector("section.srp_results__2UEV_", timeout=10000)
+        # Accepter cookies hvis popup findes
+        try:
+            page.click("button:has-text('Accepter alle')", timeout=3000)
+            print("✅ Cookie-popup accepteret (oversigt)")
+        except:
+            print("ℹ️ Ingen cookie-popup (oversigt)")
+
+        # Vent på bil-oversigt
+        page.wait_for_selector("section.srp_results__2UEV_", timeout=15000)
         html = page.content()
         soup = BeautifulSoup(html, "html.parser")
         cars = soup.select("article.Listing_listing__XwaYe")
@@ -59,7 +64,21 @@ def scrape_bilbasen():
 
             # Gå til bilens egen side
             page.goto(full_link)
-            page.wait_for_selector("main.bas-MuiVipPageComponent-main", timeout=8000)
+
+            # Accepter cookies igen hvis popup vises
+            try:
+                page.click("button:has-text('Accepter alle')", timeout=3000)
+                print("✅ Cookie-popup accepteret (bilside)")
+            except:
+                print("ℹ️ Ingen cookie-popup (bilside)")
+
+            # Vent på bilens indhold
+            try:
+                page.wait_for_selector("main.bas-MuiVipPageComponent-main", timeout=20000)
+            except:
+                print(f"❌ Timeout på bilside: {full_link}")
+                continue
+
             car_html = page.content()
             car_soup = BeautifulSoup(car_html, "html.parser")
 
@@ -89,7 +108,7 @@ def scrape_bilbasen():
             km = details.get("Kilometertal", "")
             motor = details.get("Drivmiddel", "")
 
-            # Generelle modeloplysninger
+            # Model-info
             model_info_rows = car_soup.select("div[aria-label='Generelle modeloplysninger*'] tr")
             model_info = {row.select_one("th").get_text(strip=True): row.select_one("td").get_text(strip=True) for row in model_info_rows if row.select_one("th") and row.select_one("td")}
 
