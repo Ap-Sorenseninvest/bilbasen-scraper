@@ -5,6 +5,8 @@ import requests
 from flask import Flask
 from threading import Thread
 
+app = Flask(__name__)
+
 # 🔐 Supabase credentials fra env
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_API_KEY = os.getenv("SUPABASE_API_KEY")
@@ -24,29 +26,40 @@ def extract_car_id(link):
     return link.rstrip("/").split("/")[-1]
 
 def get_existing_ids():
-    res = requests.get(f"{SUPABASE_URL}/rest/v1/{TABLE_NAME}?select=id", headers=headers)
-    if res.status_code == 200:
-        return {row['id'] for row in res.json()}
+    try:
+        res = requests.get(f"{SUPABASE_URL}/rest/v1/{TABLE_NAME}?select=id", headers=headers)
+        if res.status_code == 200:
+            return {row['id'] for row in res.json()}
+        print("⚠️ Fejl ved hentning af eksisterende IDs:", res.status_code, res.text)
+    except Exception as e:
+        print("❌ Undtagelse i get_existing_ids:", e)
     return set()
 
 def scrape_bilbasen():
+    print("🚀 Starter scraper...")
     existing_ids = get_existing_ids()
+    print(f"📋 Hentet {len(existing_ids)} eksisterende IDs")
+
     with sync_playwright() as p:
+        print("✅ Playwright startet")
         browser = p.chromium.launch(headless=True)
         page = browser.new_page()
 
-        # Gå til bilbasens oversigt
+        print("🌍 Går til Bilbasen oversigt...")
         page.goto("https://www.bilbasen.dk/brugt/bil?includeengroscvr=true&includeleasing=false&sortby=date&sortorder=desc")
 
-        # Accepter cookies hvis popup findes
         try:
             page.click("button:has-text('Accepter alle')", timeout=3000)
             print("✅ Cookie-popup accepteret (oversigt)")
         except:
             print("ℹ️ Ingen cookie-popup (oversigt)")
 
-        # Vent på bil-oversigt
-        page.wait_for_selector("section.srp_results__2UEV_", timeout=15000)
+        try:
+            page.wait_for_selector("section.srp_results__2UEV_", timeout=15000)
+        except:
+            print("❌ Kunne ikke finde bil-oversigt!")
+            return
+
         html = page.content()
         soup = BeautifulSoup(html, "html.parser")
         cars = soup.select("article.Listing_listing__XwaYe")
@@ -62,33 +75,26 @@ def scrape_bilbasen():
             car_id = extract_car_id(full_link)
 
             if car_id in existing_ids:
+                print(f"⏩ Springer over eksisterende bil {car_id}")
                 continue
 
-            # Gå til bilens egen side (med timeout og fejl-håndtering)
-            try:
-                page.goto(full_link, timeout=60000, wait_until="domcontentloaded")
-                page.wait_for_timeout(2000)
-            except:
-                print(f"❌ Timeout ved navigation til bilside: {full_link}")
-                continue
-
-            # Accepter cookies igen hvis popup vises
+            page.goto(full_link)
             try:
                 page.click("button:has-text('Accepter alle')", timeout=3000)
                 print("✅ Cookie-popup accepteret (bilside)")
             except:
-                print("ℹ️ Ingen cookie-popup (bilside)")
+                pass
 
             try:
                 page.wait_for_selector("main.bas-MuiVipPageComponent-main", timeout=20000)
             except:
-                print(f"❌ Timeout på indhold ved: {full_link}")
+                print(f"❌ Timeout på bilside: {full_link}")
                 continue
 
             car_html = page.content()
             car_soup = BeautifulSoup(car_html, "html.parser")
 
-            # Hent detaljer
+            # Parse details
             price_el = car_soup.select_one('span.bas-MuiCarPriceComponent-value[data-e2e="car-retail-price"]')
             price = price_el.get_text(strip=True) if price_el else ""
 
@@ -144,30 +150,20 @@ def scrape_bilbasen():
                 "doors": model_info.get("Døre", "")
             }
 
+            print(f"📤 Sender data til Supabase for bil: {brand_model} ({car_id})")
             response = requests.post(
                 f"{SUPABASE_URL}/rest/v1/{TABLE_NAME}",
                 json=data,
                 headers=headers
             )
-            print(f"✅ Gemt: {brand_model} - {price}")
-
-# Flask server til Render
-from flask import Flask
-from threading import Thread
-
-app = Flask(__name__)
+            print(f"🔁 Supabase respons: {response.status_code} - {response.text}")
 
 @app.route("/")
 def index():
-    return "Bilbasen scraper kører! 🚗"
+    return "✅ Bilbasen scraper kører!"
 
 def run_scraper():
-    try:
-        print("🚀 Starter scraper...")
-        scrape_bilbasen()
-    except Exception as e:
-        import traceback
-        print("❌ Fejl i scraper:\n", traceback.format_exc())
+    scrape_bilbasen()
 
 if __name__ == "__main__":
     Thread(target=run_scraper).start()
