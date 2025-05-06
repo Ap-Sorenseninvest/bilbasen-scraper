@@ -152,13 +152,22 @@ def scrape_bilbasen():
             print(f"✅ Gemt: {brand_model} - {price}")
 
 # Flask server til Render
+from flask import Flask
+from threading import Thread
+
 app = Flask(__name__)
+
 @app.route("/")
 def index():
     return "Bilbasen scraper kører! 🚗"
 
 def run_scraper():
-    scrape_bilbasen()
+    try:
+        print("🚀 Starter scraper...")
+        scrape_bilbasen()
+    except Exception as e:
+        import traceback
+        print("❌ Fejl i scraper:\n", traceback.format_exc())
 
 if __name__ == "__main__":
     Thread(target=run_scraper).start()
