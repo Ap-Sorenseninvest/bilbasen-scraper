@@ -2,12 +2,7 @@ from playwright.sync_api import sync_playwright
 from bs4 import BeautifulSoup
 import os
 import requests
-from flask import Flask
-from threading import Thread
 
-app = Flask(__name__)
-
-# 🔐 Supabase credentials fra env
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_API_KEY = os.getenv("SUPABASE_API_KEY")
 TABLE_NAME = "bilbasen_cars"
@@ -30,40 +25,41 @@ def get_existing_ids():
         res = requests.get(f"{SUPABASE_URL}/rest/v1/{TABLE_NAME}?select=id", headers=headers)
         if res.status_code == 200:
             return {row['id'] for row in res.json()}
-        print("⚠️ Fejl ved hentning af eksisterende IDs:", res.status_code, res.text)
+        return set()
     except Exception as e:
-        print("❌ Undtagelse i get_existing_ids:", e)
-    return set()
+        print("❌ Kunne ikke hente eksisterende IDs:", e)
+        return set()
 
 def scrape_bilbasen():
-    print("🚀 Starter scraper...")
     existing_ids = get_existing_ids()
-    print(f"📋 Hentet {len(existing_ids)} eksisterende IDs")
-
     with sync_playwright() as p:
-        print("✅ Playwright startet")
-        browser = p.chromium.launch(headless=True)
+        browser = p.chromium.launch(headless=True, args=["--no-sandbox"])
         page = browser.new_page()
 
-        print("🌍 Går til Bilbasen oversigt...")
-        page.goto("https://www.bilbasen.dk/brugt/bil?includeengroscvr=true&includeleasing=false&sortby=date&sortorder=desc")
+        print("🚗 Starter scraping...")
+
+        try:
+            page.goto("https://www.bilbasen.dk/brugt/bil?includeengroscvr=true&includeleasing=false&sortby=date&sortorder=desc", timeout=30000)
+        except Exception as e:
+            print("❌ Fejl ved åbningsside:", e)
+            return
 
         try:
             page.click("button:has-text('Accepter alle')", timeout=3000)
-            print("✅ Cookie-popup accepteret (oversigt)")
+            print("✅ Accepteret cookies")
         except:
-            print("ℹ️ Ingen cookie-popup (oversigt)")
+            print("ℹ️ Ingen cookie-popup")
 
         try:
             page.wait_for_selector("section.srp_results__2UEV_", timeout=15000)
-        except:
-            print("❌ Kunne ikke finde bil-oversigt!")
+        except Exception as e:
+            print("❌ Timeout på oversigtsside:", e)
             return
 
         html = page.content()
         soup = BeautifulSoup(html, "html.parser")
         cars = soup.select("article.Listing_listing__XwaYe")
-        print(f"\n🚗 Fundet {len(cars)} biler på Bilbasen")
+        print(f"🔍 Fundet {len(cars)} biler")
 
         for car in cars:
             link_el = car.select_one("a.Listing_link__6Z504")
@@ -75,13 +71,16 @@ def scrape_bilbasen():
             car_id = extract_car_id(full_link)
 
             if car_id in existing_ids:
-                print(f"⏩ Springer over eksisterende bil {car_id}")
                 continue
 
-            page.goto(full_link)
+            try:
+                page.goto(full_link, timeout=30000)
+            except Exception as e:
+                print(f"❌ Fejl ved goto på {full_link}: {e}")
+                continue
+
             try:
                 page.click("button:has-text('Accepter alle')", timeout=3000)
-                print("✅ Cookie-popup accepteret (bilside)")
             except:
                 pass
 
@@ -94,21 +93,20 @@ def scrape_bilbasen():
             car_html = page.content()
             car_soup = BeautifulSoup(car_html, "html.parser")
 
-            # Parse details
-            price_el = car_soup.select_one('span.bas-MuiCarPriceComponent-value[data-e2e="car-retail-price"]')
-            price = price_el.get_text(strip=True) if price_el else ""
-
             title_el = car_soup.select_one("h1.bas-MuiCarHeaderComponent-title")
             brand_model = title_el.get_text(strip=True) if title_el else ""
             brand = brand_model.split(" ")[0] if brand_model else ""
             model = " ".join(brand_model.split(" ")[1:]) if brand_model else ""
 
-            image_tags = car_soup.select("img.bas-MuiGalleryImageComponent-image")
-            image_urls = [img["src"] for img in image_tags if img.has_attr("src")]
-            images_combined = ", ".join(image_urls[:3])
+            price_el = car_soup.select_one('span.bas-MuiCarPriceComponent-value[data-e2e="car-retail-price"]')
+            price = price_el.get_text(strip=True) if price_el else ""
 
             desc_el = car_soup.select_one("div[aria-label='beskrivelse'] .bas-MuiAdDescriptionComponent-descriptionText")
             description = desc_el.get_text(" ", strip=True) if desc_el else ""
+
+            image_tags = car_soup.select("img.bas-MuiGalleryImageComponent-image")
+            image_urls = [img["src"] for img in image_tags if img.has_attr("src")]
+            images_combined = ", ".join(image_urls[:3])
 
             details_rows = car_soup.select("div[aria-label='Detaljer'] tr")
             details = {row.select_one("th").get_text(strip=True): row.select_one("td").get_text(strip=True) for row in details_rows if row.select_one("th") and row.select_one("td")}
@@ -150,21 +148,14 @@ def scrape_bilbasen():
                 "doors": model_info.get("Døre", "")
             }
 
-            print(f"📤 Sender data til Supabase for bil: {brand_model} ({car_id})")
-            response = requests.post(
-                f"{SUPABASE_URL}/rest/v1/{TABLE_NAME}",
-                json=data,
-                headers=headers
-            )
-            print(f"🔁 Supabase respons: {response.status_code} - {response.text}")
-
-@app.route("/")
-def index():
-    return "✅ Bilbasen scraper kører!"
-
-def run_scraper():
-    scrape_bilbasen()
+            try:
+                response = requests.post(f"{SUPABASE_URL}/rest/v1/{TABLE_NAME}", json=data, headers=headers)
+                if response.status_code in [200, 201]:
+                    print(f"✅ Gemt: {brand_model} - {price}")
+                else:
+                    print(f"⚠️ Kunne ikke gemme {car_id}: {response.status_code}")
+            except Exception as e:
+                print(f"❌ Fejl ved post til Supabase: {e}")
 
 if __name__ == "__main__":
-    Thread(target=run_scraper).start()
-    app.run(host="0.0.0.0", port=10000)
+    scrape_bilbasen()
