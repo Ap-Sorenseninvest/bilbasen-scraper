@@ -2,8 +2,7 @@ from playwright.sync_api import sync_playwright
 from bs4 import BeautifulSoup
 import os
 import requests
-from flask import Flask
-from threading import Thread
+import time
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_API_KEY = os.getenv("SUPABASE_API_KEY")
@@ -158,3 +157,10 @@ def scrape_bilbasen():
                     print(f"⚠️ Kunne ikke gemme {car_id}: {response.status_code}")
             except Exception as e:
                 print(f"❌ Fejl ved post til Supabase: {e}")
+
+if __name__ == "__main__":
+    while True:
+        print("🔁 Starter scraping...")
+        scrape_bilbasen()
+        print("⏳ Venter 1 time...")
+        time.sleep(3600)
