@@ -2,6 +2,8 @@ from playwright.sync_api import sync_playwright
 from bs4 import BeautifulSoup
 import os
 import requests
+from flask import Flask
+from threading import Thread
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_API_KEY = os.getenv("SUPABASE_API_KEY")
@@ -74,7 +76,7 @@ def scrape_bilbasen():
                 continue
 
             try:
-                page.goto(full_link, timeout=30000)
+                page.goto(full_link, timeout=30000, wait_until='domcontentloaded')
             except Exception as e:
                 print(f"❌ Fejl ved goto på {full_link}: {e}")
                 continue
@@ -157,18 +159,15 @@ def scrape_bilbasen():
             except Exception as e:
                 print(f"❌ Fejl ved post til Supabase: {e}")
 
-from flask import Flask
-from threading import Thread
-
 app = Flask(__name__)
 
 @app.route("/")
 def index():
-    return "Bilbasen scraper kører 🚗"
+    return "Bilbasen scraper kører!"
 
-def run_scraper():
+def start_scraper():
     scrape_bilbasen()
 
 if __name__ == "__main__":
-    Thread(target=run_scraper).start()
+    Thread(target=start_scraper).start()
     app.run(host="0.0.0.0", port=10000)
