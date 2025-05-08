@@ -34,7 +34,7 @@ def get_existing_ids():
 def scrape_bilbasen():
     existing_ids = get_existing_ids()
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True, args=["--no-sandbox"])
+        browser = p.chromium.launch(headless=True, args=["--no-sandbox", "--disable-gpu", "--disable-dev-shm-usage"])
         page = browser.new_page()
 
         print("🚗 Starter scraping...")
@@ -76,6 +76,7 @@ def scrape_bilbasen():
 
             try:
                 page.goto(full_link, timeout=30000, wait_until='domcontentloaded')
+                time.sleep(2)  # Pause mellem hver bil
             except Exception as e:
                 print(f"❌ Fejl ved goto på {full_link}: {e}")
                 continue
