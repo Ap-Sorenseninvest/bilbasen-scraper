@@ -164,4 +164,4 @@ if __name__ == "__main__":
         print("🔁 Starter scraping...")
         scrape_bilbasen()
         print("⏳ Venter 1 time...")
-        time.sleep(3600)
+        time.sleep(1800)
