@@ -6,7 +6,7 @@ import time
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_API_KEY = os.getenv("SUPABASE_API_KEY")
-TABLE_NAME = "bilbasen_cars"
+TABLE_NAME = "autouncle_cars"
 
 print("SUPABASE_URL =", SUPABASE_URL)
 print("SUPABASE_API_KEY is set =", bool(SUPABASE_API_KEY))
@@ -40,7 +40,7 @@ def scrape_bilbasen():
         print("🚗 Starter scraping...")
 
         try:
-            page.goto("https://www.bilbasen.dk/brugt/bil?includeengroscvr=true&includeleasing=false&sortby=date&sortorder=desc", timeout=30000)
+            page.goto("https://www.autouncle.dk/da/brugte-biler?search_form=1", timeout=30000)
         except Exception as e:
             print("❌ Fejl ved åbningsside:", e)
             return
@@ -68,14 +68,14 @@ def scrape_bilbasen():
                 continue
 
             link = link_el["href"]
-            full_link = link if link.startswith("http") else "https://www.bilbasen.dk" + link
+            full_link = link if link.startswith("http") else "https://www.autouncle.dk/" + link
             car_id = extract_car_id(full_link)
 
             if car_id in existing_ids:
                 continue
 
             try:
-                page.goto(full_link, timeout=30000, wait_until='domcontentloaded')
+                page.goto(full_link, timeout=10000, wait_until='domcontentloaded')
                 time.sleep(2)  # Pause mellem hver bil
             except Exception as e:
                 print(f"❌ Fejl ved goto på {full_link}: {e}")
@@ -163,5 +163,5 @@ if __name__ == "__main__":
     while True:
         print("🔁 Starter scraping...")
         scrape_bilbasen()
-        print("⏳ Venter 1 time...")
-        time.sleep(1800)
+        print("⏳ Venter 0,01 time...")
+        time.sleep(600)
