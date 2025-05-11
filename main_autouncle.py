@@ -40,7 +40,8 @@ def scrape_bilbasen():
         print("🚗 Starter scraping...")
 
         try:
-            page.goto("https://www.autouncle.dk/da/brugte-biler?search_form=1", timeout=30000)
+            page.goto("https://www.autouncle.dk/da/brugte-biler?search_form=1" \
+            "", timeout=30000)
         except Exception as e:
             print("❌ Fejl ved åbningsside:", e)
             return
@@ -75,7 +76,7 @@ def scrape_bilbasen():
                 continue
 
             try:
-                page.goto(full_link, timeout=10000, wait_until='domcontentloaded')
+                page.goto(full_link, timeout=30000, wait_until='domcontentloaded')
                 time.sleep(2)  # Pause mellem hver bil
             except Exception as e:
                 print(f"❌ Fejl ved goto på {full_link}: {e}")
@@ -163,5 +164,5 @@ if __name__ == "__main__":
     while True:
         print("🔁 Starter scraping...")
         scrape_bilbasen()
-        print("⏳ Venter 0,01 time...")
-        time.sleep(600)
+        print("⏳ Venter 0,5 time...")
+        time.sleep(1800)
