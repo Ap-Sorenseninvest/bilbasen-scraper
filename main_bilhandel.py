@@ -34,7 +34,7 @@ def get_existing_ids():
 def scrape_bilhandel():
     existing_ids = get_existing_ids()
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True, args=["--no-sandbox", "--disable-gpu", "--disable-dev-shm-usage"])
+        browser = p.chromium.launch(headless=True, args=["--no-sandbox"])
         page = browser.new_page()
 
         print("🚗 Starter scraping af Bilhandel.dk...")
@@ -45,23 +45,21 @@ def scrape_bilhandel():
             print("❌ Fejl ved åbningsside:", e)
             return
 
-        try:
-            page.wait_for_selector(".styles_listing-item__Hp3fr", timeout=15000)
-        except Exception as e:
-            print("❌ Timeout ved indlæsning af biloversigt:", e)
-            return
+        time.sleep(5)  # Vent på at JavaScript loader bilerne
 
         html = page.content()
         soup = BeautifulSoup(html, "html.parser")
-        cars = soup.select(".styles_listing-item__Hp3fr")
+        cars = soup.select("a[href^='/'][class*='listing']")
         print(f"🔍 Fundet {len(cars)} biler")
 
+        if not cars:
+            print("⚠️ Ingen biler fundet - tjek selector eller ventetid!")
+
         for car in cars:
-            link_el = car.select_one("a")
-            if not link_el:
+            link = car.get("href")
+            if not link:
                 continue
 
-            link = link_el["href"]
             full_link = "https://bilhandel.dk" + link
             car_id = extract_car_id(full_link)
 
@@ -75,29 +73,14 @@ def scrape_bilhandel():
                 print(f"❌ Fejl ved goto på {full_link}: {e}")
                 continue
 
-            try:
-                page.wait_for_selector(".page-content", timeout=20000)
-            except:
-                print(f"❌ Timeout på bilside: {full_link}")
-                continue
-
             car_html = page.content()
             car_soup = BeautifulSoup(car_html, "html.parser")
 
             title_el = car_soup.select_one("h1")
             brand_model = title_el.get_text(strip=True) if title_el else ""
-            brand = brand_model.split(" ")[0] if brand_model else ""
-            model = " ".join(brand_model.split(" ")[1:]) if brand_model else ""
 
             price_el = car_soup.select_one(".price")
             price = price_el.get_text(strip=True) if price_el else ""
-
-            desc_el = car_soup.select_one(".description")
-            description = desc_el.get_text(" ", strip=True) if desc_el else ""
-
-            image_tags = car_soup.select("img")
-            image_urls = [img["src"] for img in image_tags if img.has_attr("src") and "uploads" in img["src"]]
-            images_combined = ", ".join(image_urls[:3])
 
             specs = car_soup.select(".car-data li")
             year = km = motor = ""
@@ -107,8 +90,15 @@ def scrape_bilhandel():
                     year = txt
                 elif "km" in txt:
                     km = txt
-                elif any(fuel in txt for fuel in ["benzin", "diesel", "el"]):
+                elif "benzin" in txt or "diesel" in txt or "el" in txt:
                     motor = txt
+
+            desc_el = car_soup.select_one(".description")
+            description = desc_el.get_text(" ", strip=True) if desc_el else ""
+
+            image_tags = car_soup.select("img")
+            image_urls = [img["src"] for img in image_tags if img.has_attr("src") and "uploads" in img["src"]]
+            images_combined = ", ".join(image_urls[:3])
 
             data = {
                 "id": car_id,
@@ -118,8 +108,8 @@ def scrape_bilhandel():
                 "year": year,
                 "km": km,
                 "motor": motor,
-                "brand": brand,
-                "model": model,
+                "brand": brand_model.split(" ")[0],
+                "model": " ".join(brand_model.split(" ")[1:]),
                 "equipment": "",
                 "images": images_combined,
                 "description": description,
