@@ -4,6 +4,8 @@ import os
 import requests
 import time
 
+print("✅ main_bilhandel.py er startet")
+
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_API_KEY = os.getenv("SUPABASE_API_KEY")
 TABLE_NAME = "bilhandel_cars"
@@ -32,6 +34,7 @@ def get_existing_ids():
         return set()
 
 def scrape_bilhandel():
+    print("▶️ Kører scrape_bilhandel()")
     existing_ids = get_existing_ids()
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True, args=["--no-sandbox"])
