@@ -4,8 +4,6 @@ import os
 import requests
 import time
 
-print("✅ main_bilhandel.py er startet")
-
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_API_KEY = os.getenv("SUPABASE_API_KEY")
 TABLE_NAME = "bilhandel_cars"
@@ -34,7 +32,6 @@ def get_existing_ids():
         return set()
 
 def scrape_bilhandel():
-    print("▶️ Kører scrape_bilhandel()")
     existing_ids = get_existing_ids()
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True, args=["--no-sandbox"])
@@ -48,11 +45,15 @@ def scrape_bilhandel():
             print("❌ Fejl ved åbningsside:", e)
             return
 
-        time.sleep(5)  # Vent på at JavaScript loader bilerne
+        try:
+            page.wait_for_selector("a[href^='/'][data-sentry-component='VipLink']", timeout=15000)
+        except Exception as e:
+            print("❌ Timeout ved biloversigt:", e)
+            return
 
         html = page.content()
         soup = BeautifulSoup(html, "html.parser")
-        cars = soup.select("a[href^='/'][class*='listing']")
+        cars = soup.select("a[href^='/'][data-sentry-component='VipLink']")
         print(f"🔍 Fundet {len(cars)} biler")
 
         if not cars:
@@ -86,15 +87,27 @@ def scrape_bilhandel():
             price = price_el.get_text(strip=True) if price_el else ""
 
             specs = car_soup.select(".car-data li")
-            year = km = motor = ""
+            year = km = motor = listed = seller_type = horsepower = transmission = location = ""
             for spec in specs:
                 txt = spec.get_text(strip=True).lower()
-                if "årg" in txt:
+                if "/" in txt and any(y.isdigit() for y in txt):
                     year = txt
                 elif "km" in txt:
                     km = txt
                 elif "benzin" in txt or "diesel" in txt or "el" in txt:
                     motor = txt
+                elif "oprettet" in txt:
+                    listed = txt.replace("oprettet", "").strip()
+                elif "privat sælger" in txt:
+                    seller_type = "Privat"
+                elif "forhandler" in txt:
+                    seller_type = "Forhandler"
+                elif "hk" in txt:
+                    horsepower = txt
+                elif "gear" in txt:
+                    transmission = txt
+                elif " “" not in txt and len(txt.split()) <= 3:
+                    location = txt
 
             desc_el = car_soup.select_one(".description")
             description = desc_el.get_text(" ", strip=True) if desc_el else ""
@@ -120,7 +133,12 @@ def scrape_bilhandel():
                 "type": "",
                 "weight": "",
                 "width": "",
-                "doors": ""
+                "doors": "",
+                "listed": listed,
+                "seller_type": seller_type,
+                "horsepower": horsepower,
+                "transmission": transmission,
+                "location": location
             }
 
             try:
