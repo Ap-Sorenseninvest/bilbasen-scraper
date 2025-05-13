@@ -130,6 +130,15 @@ def scrape_bilbasen():
                     equipment_items.append(td.get_text(strip=True))
             equipment = ", ".join(equipment_items)
 
+            listed = car_soup.select_one("div:contains('Oprettet')")
+            listed_text = listed.get_text(strip=True).replace("Oprettet", "").strip() if listed else ""
+
+            seller_type = "Privat" if "Privat sælger" in car_html else ("Forhandler" if "Forhandler" in car_html else "")
+
+            horsepower = next((val for key, val in details.items() if "Hk" in key), "")
+            transmission = next((val for key, val in details.items() if "Gear" in key), "")
+            location = details.get("By", "")
+
             data = {
                 "id": car_id,
                 "title": brand_model,
@@ -147,7 +156,12 @@ def scrape_bilbasen():
                 "type": model_info.get("Type", ""),
                 "weight": model_info.get("Vægt", ""),
                 "width": model_info.get("Bredde", ""),
-                "doors": model_info.get("Døre", "")
+                "doors": model_info.get("Døre", ""),
+                "listed": listed_text,
+                "seller_type": seller_type,
+                "horsepower": horsepower,
+                "transmission": transmission,
+                "location": location
             }
 
             try:
