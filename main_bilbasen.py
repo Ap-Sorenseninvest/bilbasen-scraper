@@ -1,8 +1,9 @@
-from playwright.sync_api import sync_playwright
+ffrom playwright.sync_api import sync_playwright
 from bs4 import BeautifulSoup
 import os
 import requests
 import time
+from datetime import datetime
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_API_KEY = os.getenv("SUPABASE_API_KEY")
@@ -130,8 +131,16 @@ def scrape_bilbasen():
                     equipment_items.append(td.get_text(strip=True))
             equipment = ", ".join(equipment_items)
 
-            listed = car_soup.select_one("div:contains('Oprettet')")
-            listed_text = listed.get_text(strip=True).replace("Oprettet", "").strip() if listed else ""
+            listed = ""
+            for div in car_soup.find_all("div"):
+                if "Oprettet" in div.get_text():
+                    listed = div.get_text(strip=True).replace("Oprettet", "").strip()
+                    break
+
+            try:
+                listed_date = datetime.strptime(listed, "%d.%m.%Y").isoformat()
+            except:
+                listed_date = None
 
             seller_type = "Privat" if "Privat sælger" in car_html else ("Forhandler" if "Forhandler" in car_html else "")
 
@@ -157,7 +166,7 @@ def scrape_bilbasen():
                 "weight": model_info.get("Vægt", ""),
                 "width": model_info.get("Bredde", ""),
                 "doors": model_info.get("Døre", ""),
-                "listed": listed_text,
+                "listed": listed_date,
                 "seller_type": seller_type,
                 "horsepower": horsepower,
                 "transmission": transmission,
