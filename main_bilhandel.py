@@ -3,13 +3,11 @@ from bs4 import BeautifulSoup
 import os
 import requests
 import time
+from datetime import datetime, date
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_API_KEY = os.getenv("SUPABASE_API_KEY")
 TABLE_NAME = "bilhandel_cars"
-
-print("SUPABASE_URL =", SUPABASE_URL)
-print("SUPABASE_API_KEY is set =", bool(SUPABASE_API_KEY))
 
 headers = {
     "apikey": SUPABASE_API_KEY,
@@ -46,24 +44,18 @@ def scrape_bilhandel():
             return
 
         try:
-            page.wait_for_selector("a[href^='/'][data-sentry-component='VipLink']", timeout=15000)
+            page.wait_for_selector("a[data-sentry-component='VipLink']", timeout=15000)
         except Exception as e:
-            print("❌ Timeout ved biloversigt:", e)
+            print("❌ Timeout ved indlæsning af biloversigt:", e)
             return
 
         html = page.content()
         soup = BeautifulSoup(html, "html.parser")
-        cars = soup.select("a[href^='/'][data-sentry-component='VipLink']")
+        cars = soup.select("a[data-sentry-component='VipLink']")
         print(f"🔍 Fundet {len(cars)} biler")
 
-        if not cars:
-            print("⚠️ Ingen biler fundet - tjek selector eller ventetid!")
-
         for car in cars:
-            link = car.get("href")
-            if not link:
-                continue
-
+            link = car["href"]
             full_link = "https://bilhandel.dk" + link
             car_id = extract_car_id(full_link)
 
@@ -82,32 +74,11 @@ def scrape_bilhandel():
 
             title_el = car_soup.select_one("h1")
             brand_model = title_el.get_text(strip=True) if title_el else ""
+            brand = brand_model.split(" ")[0] if brand_model else ""
+            model = " ".join(brand_model.split(" ")[1:]) if brand_model else ""
 
-            price_el = car_soup.select_one(".price")
+            price_el = car_soup.select_one(".MuiTypography-h5")
             price = price_el.get_text(strip=True) if price_el else ""
-
-            specs = car_soup.select(".car-data li")
-            year = km = motor = listed = seller_type = horsepower = transmission = location = ""
-            for spec in specs:
-                txt = spec.get_text(strip=True).lower()
-                if "/" in txt and any(y.isdigit() for y in txt):
-                    year = txt
-                elif "km" in txt:
-                    km = txt
-                elif "benzin" in txt or "diesel" in txt or "el" in txt:
-                    motor = txt
-                elif "oprettet" in txt:
-                    listed = txt.replace("oprettet", "").strip()
-                elif "privat sælger" in txt:
-                    seller_type = "Privat"
-                elif "forhandler" in txt:
-                    seller_type = "Forhandler"
-                elif "hk" in txt:
-                    horsepower = txt
-                elif "gear" in txt:
-                    transmission = txt
-                elif " “" not in txt and len(txt.split()) <= 3:
-                    location = txt
 
             desc_el = car_soup.select_one(".description")
             description = desc_el.get_text(" ", strip=True) if desc_el else ""
@@ -115,6 +86,33 @@ def scrape_bilhandel():
             image_tags = car_soup.select("img")
             image_urls = [img["src"] for img in image_tags if img.has_attr("src") and "uploads" in img["src"]]
             images_combined = ", ".join(image_urls[:3])
+
+            year = km = motor = listed_date = seller_type = ""
+            days_listed = None
+
+            for p in car_soup.select("p.MuiTypography-body1"):
+                text = p.get_text(strip=True).lower()
+                if "km" in text and "000" in text:
+                    km = text
+                elif "diesel" in text or "benzin" in text or "el" in text:
+                    motor = text
+                elif "/" in text and len(text) == 7:
+                    year = text
+                elif "oprettet" in text:
+                    listed_raw = text.replace("oprettet", "").strip()
+                    try:
+                        listed_date_obj = datetime.strptime(listed_raw, "%d.%m.%Y")
+                        listed_date = listed_date_obj.date().isoformat()
+                        days_listed = (date.today() - listed_date_obj.date()).days
+                    except:
+                        listed_date = ""
+                        days_listed = None
+                elif "privat sælger" in text:
+                    seller_type = "Privat"
+                elif "forhandler" in text:
+                    seller_type = "Forhandler"
+
+            scraped_at = date.today().isoformat()
 
             data = {
                 "id": car_id,
@@ -124,8 +122,8 @@ def scrape_bilhandel():
                 "year": year,
                 "km": km,
                 "motor": motor,
-                "brand": brand_model.split(" ")[0],
-                "model": " ".join(brand_model.split(" ")[1:]),
+                "brand": brand,
+                "model": model,
                 "equipment": "",
                 "images": images_combined,
                 "description": description,
@@ -134,11 +132,10 @@ def scrape_bilhandel():
                 "weight": "",
                 "width": "",
                 "doors": "",
-                "listed": listed,
+                "listed_date": listed_date,
+                "days_listed": days_listed,
                 "seller_type": seller_type,
-                "horsepower": horsepower,
-                "transmission": transmission,
-                "location": location
+                "scraped_at": scraped_at
             }
 
             try:

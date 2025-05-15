@@ -3,7 +3,7 @@ from bs4 import BeautifulSoup
 import os
 import requests
 import time
-from datetime import datetime
+from datetime import datetime, date
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_API_KEY = os.getenv("SUPABASE_API_KEY")
@@ -77,7 +77,7 @@ def scrape_bilbasen():
 
             try:
                 page.goto(full_link, timeout=30000, wait_until='domcontentloaded')
-                time.sleep(2)  # Pause mellem hver bil
+                time.sleep(2)
             except Exception as e:
                 print(f"❌ Fejl ved goto på {full_link}: {e}")
                 continue
@@ -131,16 +131,15 @@ def scrape_bilbasen():
                     equipment_items.append(td.get_text(strip=True))
             equipment = ", ".join(equipment_items)
 
-            listed = ""
-            for div in car_soup.find_all("div"):
-                if "Oprettet" in div.get_text():
-                    listed = div.get_text(strip=True).replace("Oprettet", "").strip()
-                    break
-
+            listed_el = car_soup.find(string=lambda t: "Oprettet" in t)
+            listed_raw = listed_el.replace("Oprettet", "").strip() if listed_el else ""
             try:
-                listed_date = datetime.strptime(listed, "%d.%m.%Y").isoformat()
+                listed_date_obj = datetime.strptime(listed_raw, "%d.%m.%Y")
+                listed_date = listed_date_obj.date().isoformat()
+                days_listed = (date.today() - listed_date_obj.date()).days
             except:
-                listed_date = None
+                listed_date = ""
+                days_listed = None
 
             seller_type = "Privat" if "Privat sælger" in car_html else ("Forhandler" if "Forhandler" in car_html else "")
 
@@ -166,11 +165,13 @@ def scrape_bilbasen():
                 "weight": model_info.get("Vægt", ""),
                 "width": model_info.get("Bredde", ""),
                 "doors": model_info.get("Døre", ""),
-                "listed": listed_date,
+                "listed_date": listed_date,
+                "days_listed": days_listed,
                 "seller_type": seller_type,
                 "horsepower": horsepower,
                 "transmission": transmission,
-                "location": location
+                "location": location,
+                "scraped_at": datetime.today().date().isoformat()
             }
 
             try:
