@@ -36,26 +36,22 @@ def scrape_bilhandel():
         page = browser.new_page()
 
         print("🚗 Starter scraping af Bilhandel.dk...")
-
         try:
             page.goto("https://bilhandel.dk/s/alle-biler?sort=nyest&link=yes", timeout=30000)
+            page.wait_for_selector(".MuiGrid-root.MuiGrid-container.css-1d3bbye", timeout=15000)
         except Exception as e:
-            print("❌ Fejl ved åbningsside:", e)
-            return
-
-        try:
-            page.wait_for_selector("a[data-sentry-component='VipLink']", timeout=15000)
-        except Exception as e:
-            print("❌ Timeout ved indlæsning af biloversigt:", e)
+            print("❌ Timeout eller fejl ved indlæsning af oversigt:", e)
             return
 
         html = page.content()
         soup = BeautifulSoup(html, "html.parser")
-        cars = soup.select("a[data-sentry-component='VipLink']")
+        cars = soup.select("a[data-sentry-element='Link']")
         print(f"🔍 Fundet {len(cars)} biler")
 
         for car in cars:
-            link = car["href"]
+            link = car.get("href")
+            if not link:
+                continue
             full_link = "https://bilhandel.dk" + link
             car_id = extract_car_id(full_link)
 
@@ -70,63 +66,46 @@ def scrape_bilhandel():
                 continue
 
             car_html = page.content()
-            car_soup = BeautifulSoup(car_html, "html.parser")
+            soup = BeautifulSoup(car_html, "html.parser")
 
-            title_el = car_soup.select_one("h1")
-            brand_model = title_el.get_text(strip=True) if title_el else ""
-            brand = brand_model.split(" ")[0] if brand_model else ""
-            model = " ".join(brand_model.split(" ")[1:]) if brand_model else ""
+            def get_text_by_tooltip(title):
+                el = soup.find(attrs={"tooltoptitle": title})
+                return el.get_text(strip=True) if el else ""
 
-            price_el = car_soup.select_one(".MuiTypography-h5")
-            price = price_el.get_text(strip=True) if price_el else ""
+            brand_model_el = soup.select_one("h1.MuiTypography-root.MuiTypography-body1.css-1azqjhe")
+            price_el = soup.select_one(".MuiTypography-root.MuiTypography-body1.css-12s5272")
+            motor_el = soup.select_one(".MuiTypography-root.MuiTypography-body1.css-1b1eawi")
+            description_el = soup.select_one(".MuiBox-root.css-leu9o3")
+            specs_els = soup.select(".MuiGrid-root.MuiGrid-item.MuiGrid-grid-xs-6.css-1s50f5r")
+            specs = [el.get_text(strip=True) for el in specs_els]
+            equipment_els = soup.select(".MuiGrid-root.MuiGrid-item.MuiGrid-grid-xs-12.css-15j76c0")
+            equipment = ", ".join(el.get_text(strip=True) for el in equipment_els)
+            image_els = soup.select(".image-gallery-swipe img")
+            images = ", ".join(img["src"] for img in image_els[:3] if img.has_attr("src"))
 
-            desc_el = car_soup.select_one(".description")
-            description = desc_el.get_text(" ", strip=True) if desc_el else ""
-
-            image_tags = car_soup.select("img")
-            image_urls = [img["src"] for img in image_tags if img.has_attr("src") and "uploads" in img["src"]]
-            images_combined = ", ".join(image_urls[:3])
-
-            year = km = motor = listed_date = seller_type = ""
-            days_listed = None
-
-            for p in car_soup.select("p.MuiTypography-body1"):
-                text = p.get_text(strip=True).lower()
-                if "km" in text and "000" in text:
-                    km = text
-                elif "diesel" in text or "benzin" in text or "el" in text:
-                    motor = text
-                elif "/" in text and len(text) == 7:
-                    year = text
-                elif "oprettet" in text:
-                    listed_raw = text.replace("oprettet", "").strip()
-                    try:
-                        listed_date_obj = datetime.strptime(listed_raw, "%d.%m.%Y")
-                        listed_date = listed_date_obj.date().isoformat()
-                        days_listed = (date.today() - listed_date_obj.date()).days
-                    except:
-                        listed_date = ""
-                        days_listed = None
-                elif "privat sælger" in text:
-                    seller_type = "Privat"
-                elif "forhandler" in text:
-                    seller_type = "Forhandler"
-
-            scraped_at = date.today().isoformat()
+            listed_el = soup.find(string=lambda t: "Oprettet" in t)
+            listed_raw = listed_el.replace("Oprettet", "").strip() if listed_el else ""
+            try:
+                listed_date_obj = datetime.strptime(listed_raw, "%d.%m.%Y")
+                listed_date = listed_date_obj.date().isoformat()
+                days_listed = (date.today() - listed_date_obj.date()).days
+            except:
+                listed_date = ""
+                days_listed = None
 
             data = {
                 "id": car_id,
-                "title": brand_model,
+                "title": brand_model_el.get_text(strip=True) if brand_model_el else "",
                 "link": full_link,
-                "price": price,
-                "year": year,
-                "km": km,
-                "motor": motor,
-                "brand": brand,
-                "model": model,
-                "equipment": "",
-                "images": images_combined,
-                "description": description,
+                "price": price_el.get_text(strip=True) if price_el else "",
+                "year": get_text_by_tooltip("Første registrering"),
+                "km": get_text_by_tooltip("Kørte km"),
+                "motor": motor_el.get_text(strip=True) if motor_el else "",
+                "brand": brand_model_el.get_text(strip=True).split(" ")[0] if brand_model_el else "",
+                "model": " ".join(brand_model_el.get_text(strip=True).split(" ")[1:]) if brand_model_el else "",
+                "equipment": equipment,
+                "images": images,
+                "description": description_el.get_text(strip=True) if description_el else "",
                 "category": "",
                 "type": "",
                 "weight": "",
@@ -134,14 +113,17 @@ def scrape_bilhandel():
                 "doors": "",
                 "listed_date": listed_date,
                 "days_listed": days_listed,
-                "seller_type": seller_type,
-                "scraped_at": scraped_at
+                "seller_type": "Privat" if "Privat sælger" in car_html else ("Forhandler" if "Forhandler" in car_html else ""),
+                "horsepower": get_text_by_tooltip("Ydelse"),
+                "transmission": get_text_by_tooltip("Gear"),
+                "location": get_text_by_tooltip("By"),
+                "scraped_at": date.today().isoformat()
             }
 
             try:
                 response = requests.post(f"{SUPABASE_URL}/rest/v1/{TABLE_NAME}", json=data, headers=headers)
                 if response.status_code in [200, 201]:
-                    print(f"✅ Gemt: {brand_model} - {price}")
+                    print(f"✅ Gemt: {data['title']} - {data['price']}")
                 else:
                     print(f"⚠️ Kunne ikke gemme {car_id}: {response.status_code}")
             except Exception as e:
