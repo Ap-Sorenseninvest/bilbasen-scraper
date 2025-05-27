@@ -71,7 +71,7 @@ def scrape_bilbasen():
                 continue
 
             link = link_el["href"]
-            full_link = "https://www.bilbasen.dk" + link
+            full_link = link if link.startswith("http") else "https://www.bilbasen.dk" + link
             car_id = extract_car_id(full_link)
 
             if car_id in existing_ids:
