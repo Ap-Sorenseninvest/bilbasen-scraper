@@ -24,30 +24,35 @@ def get_existing_ids():
         res = requests.get(f"{SUPABASE_URL}/rest/v1/{TABLE_NAME}?select=id", headers=headers)
         if res.status_code == 200:
             return {row['id'] for row in res.json()}
-        return set()
     except Exception as e:
-        print("❌ Kunne ikke hente eksisterende IDs:", e)
-        return set()
+        print("❌ Fejl ved hentning af eksisterende IDs:", e)
+    return set()
+
+def safe_goto(page, url, retries=2):
+    for i in range(retries):
+        try:
+            page.goto(url, timeout=30000, wait_until='domcontentloaded')
+            return True
+        except Exception as e:
+            print(f"⚠️ Goto-fejl på forsøg {i+1}/{retries}: {url} - {e}")
+            time.sleep(3)
+    return False
 
 def scrape_bilbasen():
     existing_ids = get_existing_ids()
+
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True, args=["--no-sandbox", "--disable-gpu", "--disable-dev-shm-usage"])
+        browser = p.chromium.launch(headless=True, args=["--no-sandbox"])
         page = browser.new_page()
 
-        print("🚗 Starter scraping...")
-
-        try:
-            page.goto("https://www.bilbasen.dk/brugt/bil?includeengroscvr=true&includeleasing=false&sortby=date&sortorder=desc", timeout=30000)
-        except Exception as e:
-            print("❌ Fejl ved åbningsside:", e)
+        print("🔁 Starter scraping...")
+        if not safe_goto(page, "https://www.bilbasen.dk/brugt/bil?includeengroscvr=true&includeleasing=false&sortby=date&sortorder=desc"):
             return
 
         try:
             page.click("button:has-text('Accepter alle')", timeout=3000)
-            print("✅ Accepteret cookies")
         except:
-            print("ℹ️ Ingen cookie-popup")
+            pass
 
         try:
             page.wait_for_selector("section.srp_results__2UEV_", timeout=15000)
@@ -66,17 +71,13 @@ def scrape_bilbasen():
                 continue
 
             link = link_el["href"]
-            full_link = link if link.startswith("http") else "https://www.bilbasen.dk" + link
+            full_link = "https://www.bilbasen.dk" + link
             car_id = extract_car_id(full_link)
 
             if car_id in existing_ids:
                 continue
 
-            try:
-                page.goto(full_link, timeout=30000, wait_until='domcontentloaded')
-                time.sleep(2)
-            except Exception as e:
-                print(f"❌ Fejl ved goto på {full_link}: {e}")
+            if not safe_goto(page, full_link):
                 continue
 
             try:
@@ -86,7 +87,7 @@ def scrape_bilbasen():
 
             try:
                 page.wait_for_selector("main.bas-MuiVipPageComponent-main", timeout=20000)
-            except:
+            except Exception as e:
                 print(f"❌ Timeout på bilside: {full_link}")
                 continue
 
@@ -128,18 +129,6 @@ def scrape_bilbasen():
                     equipment_items.append(td.get_text(strip=True))
             equipment = ", ".join(equipment_items)
 
-            listed_el = car_soup.find(string=lambda t: "Oprettet" in t)
-            listed_raw = listed_el.replace("Oprettet", "").strip() if listed_el else ""
-            try:
-                listed_date_obj = datetime.strptime(listed_raw, "%d.%m.%Y")
-                listed_date = listed_date_obj.date().isoformat()
-                days_listed = (date.today() - listed_date_obj.date()).days
-            except:
-                listed_date = ""
-                days_listed = None
-
-            seller_type = "Privat" if "Privat sælger" in car_html else ("Forhandler" if "Forhandler" in car_html else "")
-
             horsepower = next((val for key, val in details.items() if "Ydelse" in key), "")
             transmission = next((val for key, val in details.items() if "Gear" in key), "")
             location = details.get("By", "")
@@ -164,9 +153,9 @@ def scrape_bilbasen():
                 "weight": model_info.get("Vægt", ""),
                 "width": model_info.get("Bredde", ""),
                 "doors": model_info.get("Døre", ""),
-                "listed_date": listed_date,
-                "days_listed": days_listed,
-                "seller_type": seller_type,
+                "listed_date": "",
+                "days_listed": None,
+                "seller_type": "",
                 "horsepower": horsepower,
                 "transmission": transmission,
                 "location": location,
@@ -184,7 +173,6 @@ def scrape_bilbasen():
 
 if __name__ == "__main__":
     while True:
-        print("🔁 Starter scraping...")
         scrape_bilbasen()
         print("⏳ Venter 10 min...")
         time.sleep(600)
