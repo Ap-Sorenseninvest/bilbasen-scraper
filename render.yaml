@@ -2,7 +2,6 @@ services:
   - type: background
     name: bilbasen-scraper
     env: docker
-    plan: free
     dockerfilePath: Dockerfile
     dockerCommand: python main_bilbasen.py
     envVars:
@@ -14,7 +13,6 @@ services:
   - type: background
     name: bilhandel-scraper
     env: docker
-    plan: free
     dockerfilePath: Dockerfile
     dockerCommand: python main_bilhandel.py
     envVars:
