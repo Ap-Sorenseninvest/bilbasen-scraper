@@ -9,6 +9,9 @@ SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_API_KEY = os.getenv("SUPABASE_API_KEY")
 TABLE_NAME = "bilbasen_cars"
 
+print("SUPABASE_URL =", SUPABASE_URL)
+print("SUPABASE_API_KEY is set =", bool(SUPABASE_API_KEY))
+
 headers = {
     "apikey": SUPABASE_API_KEY,
     "Authorization": f"Bearer {SUPABASE_API_KEY}",
@@ -45,8 +48,9 @@ def scrape_bilbasen():
 
         try:
             page.click("button:has-text('Accepter alle')", timeout=3000)
+            print("✅ Accepteret cookies")
         except:
-            pass
+            print("ℹ️ Ingen cookie-popup")
 
         try:
             page.wait_for_selector("section.srp_results__2UEV_", timeout=15000)
@@ -108,13 +112,15 @@ def scrape_bilbasen():
             images_combined = ", ".join(image_urls[:3])
 
             details_rows = car_soup.select("div[aria-label='Detaljer'] tr")
-            details = {row.select_one("th").get_text(strip=True): row.select_one("td").get_text(strip=True) for row in details_rows if row.select_one("th") and row.select_one("td")}
+            details = {row.select_one("th").get_text(strip=True): row.select_one("td").get_text(strip=True)
+                       for row in details_rows if row.select_one("th") and row.select_one("td")}
             year = details.get("Modelår", "")
             km = details.get("Kilometertal", "")
             motor = details.get("Drivmiddel", "")
 
             model_info_rows = car_soup.select("div[aria-label='Generelle modeloplysninger*'] tr")
-            model_info = {row.select_one("th").get_text(strip=True): row.select_one("td").get_text(strip=True) for row in model_info_rows if row.select_one("th") and row.select_one("td")}
+            model_info = {row.select_one("th").get_text(strip=True): row.select_one("td").get_text(strip=True)
+                          for row in model_info_rows if row.select_one("th") and row.select_one("td")}
 
             equipment_rows = car_soup.select("div[aria-label='Udstyr og tilbehør'] tr")
             equipment_items = []
@@ -127,6 +133,7 @@ def scrape_bilbasen():
                     equipment_items.append(td.get_text(strip=True))
             equipment = ", ".join(equipment_items)
 
+            # Oprettelsesdato (listed_date)
             listed_el = car_soup.find(string=lambda t: "Oprettet" in t)
             listed_raw = listed_el.replace("Oprettet", "").strip() if listed_el else ""
             try:
@@ -134,15 +141,14 @@ def scrape_bilbasen():
                 listed_date = listed_date_obj.date().isoformat()
                 days_listed = (date.today() - listed_date_obj.date()).days
             except:
-                listed_date = date.today().isoformat()
-                days_listed = 0
+                listed_date = ""
+                days_listed = None
 
+            # Andre værdier
             seller_type = "Privat" if "Privat sælger" in car_html else ("Forhandler" if "Forhandler" in car_html else "")
-
-            horsepower = next((val for key, val in details.items() if "Hk" in key), "")
+            horsepower = next((val for key, val in details.items() if "Hk" in key or "Ydelse" in key), "")
             transmission = next((val for key, val in details.items() if "Gear" in key), "")
             location = details.get("By", "")
-
             scraped_at = datetime.today().date().isoformat()
 
             data = {
