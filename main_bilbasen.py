@@ -9,9 +9,6 @@ SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_API_KEY = os.getenv("SUPABASE_API_KEY")
 TABLE_NAME = "bilbasen_cars"
 
-print("SUPABASE_URL =", SUPABASE_URL)
-print("SUPABASE_API_KEY is set =", bool(SUPABASE_API_KEY))
-
 headers = {
     "apikey": SUPABASE_API_KEY,
     "Authorization": f"Bearer {SUPABASE_API_KEY}",
@@ -48,9 +45,8 @@ def scrape_bilbasen():
 
         try:
             page.click("button:has-text('Accepter alle')", timeout=3000)
-            print("✅ Accepteret cookies")
         except:
-            print("ℹ️ Ingen cookie-popup")
+            pass
 
         try:
             page.wait_for_selector("section.srp_results__2UEV_", timeout=15000)
@@ -138,14 +134,16 @@ def scrape_bilbasen():
                 listed_date = listed_date_obj.date().isoformat()
                 days_listed = (date.today() - listed_date_obj.date()).days
             except:
-                listed_date = ""
-                days_listed = None
+                listed_date = date.today().isoformat()
+                days_listed = 0
 
             seller_type = "Privat" if "Privat sælger" in car_html else ("Forhandler" if "Forhandler" in car_html else "")
 
             horsepower = next((val for key, val in details.items() if "Hk" in key), "")
             transmission = next((val for key, val in details.items() if "Gear" in key), "")
             location = details.get("By", "")
+
+            scraped_at = datetime.today().date().isoformat()
 
             data = {
                 "id": car_id,
@@ -171,7 +169,7 @@ def scrape_bilbasen():
                 "horsepower": horsepower,
                 "transmission": transmission,
                 "location": location,
-                "scraped_at": datetime.today().date().isoformat()
+                "scraped_at": scraped_at
             }
 
             try:
